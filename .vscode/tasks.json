@@ -1,0 +1,27 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "cppbuild",
+			"label": "C/C++: avr-gcc build active file",
+			"command": "/home/korey/.platformio/packages/toolchain-atmelavr/bin/avr-gcc",
+			"args": [
+				"-fdiagnostics-color=always",
+				"-g",
+				"${file}",
+				"-o",
+				"${fileDirname}/${fileBasenameNoExtension}",
+				"-mmcu=attiny44",
+				""
+			],
+			"options": {
+				"cwd": "${fileDirname}"
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build",
+			"detail": "compiler: /home/korey/.platformio/packages/toolchain-atmelavr/bin/avr-gcc"
+		}
+	]
+}
