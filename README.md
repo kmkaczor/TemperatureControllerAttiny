@@ -7,4 +7,4 @@ going to do with the PB3 reset pin, either I will add a bootloader and change th
 will consider changing to a 16 pin ATtiny instead. Otherwise, there's always high voltage programming.
 
 Breadboard prototype:
-[image]https://github.com/kmkaczor/TemperatureControllerAttiny/blob/main/attiny.jpg]
+![Breadboard prototype]https://github.com/kmkaczor/TemperatureControllerAttiny/blob/main/attiny.jpg]
