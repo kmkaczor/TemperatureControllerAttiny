@@ -48,7 +48,7 @@ const uint8_t DIGIT_TABLE[] =
 #define SEVSEG_ERROR_INDEX 13
 #define SEVSEG_NULL 14
 
-void init_sevseg(struct sevseg_display_t *td, int num_digits,
+void init_sevseg(struct sevseg_display_t *td, uint8_t num_digits,
                  volatile uint8_t *port, uint8_t *pinmap, uint8_t *digits)
 {
     // Must have at least two digits for temperature. Single digit is not useful.
@@ -61,7 +61,7 @@ void init_sevseg(struct sevseg_display_t *td, int num_digits,
     td->pin_map = pinmap;
     td->dispdigit = digits;
 
-    for (int i = 0; i < num_digits; i++)
+    for (uint8_t i = 0; i < num_digits; i++)
     {
 
         *_DDR(td->port) |= (1 << pinmap[i]);
@@ -78,9 +78,8 @@ void init_sevseg(struct sevseg_display_t *td, int num_digits,
  * @param c
  * @return uint8_t
  */
-uint8_t set_digit(struct sevseg_display_t *td, int index, char c)
+uint8_t set_digit(struct sevseg_display_t *td, uint8_t index, char c)
 {
-
     if (c >= '0' && c <= '9')
         td->dispdigit[index] = DIGIT_TABLE[c - '0'];
     else if (c == '-')
@@ -93,13 +92,12 @@ uint8_t set_digit(struct sevseg_display_t *td, int index, char c)
 
 void setLCD_shiftreg(struct sevseg_display_t *td, struct shiftreg8_t *sr)
 {
-    static int digit_to_update = {0};
+    static uint8_t digit_to_update = {0};
 
     // Unset the priorly set digit (does nothing on first instance if run via ISR).
     *td->port &= ~(1 << td->pin_map[digit_to_update % td->num_digits]);
     digit_to_update = (digit_to_update + 1) % td->num_digits;
 
-    //    sr_send(td->dispdigit[digit_to_update]);
     shiftOut8(sr, td->dispdigit[digit_to_update]);
 
     *td->port |= (1 << td->pin_map[digit_to_update % td->num_digits]);
@@ -107,8 +105,8 @@ void setLCD_shiftreg(struct sevseg_display_t *td, struct shiftreg8_t *sr)
 
 void set_display_float(struct sevseg_display_t *td, float f)
 {
-    int leadingzero = 0;
-    int tint = (int)f * 10;
+    uint8_t leadingzero = 0;
+    uint16_t tint = (int)f * 10;
 
     if (f < 0)
     {
@@ -127,8 +125,8 @@ void set_display_float(struct sevseg_display_t *td, float f)
 
     for (int i = 1; i < td->num_digits; i++)
     {
-        int digit = ((tint / (int)pow(10, td->num_digits - 1 - i)) % 10);
-        int cr = SEVSEG_ERROR_INDEX;
+        uint16_t digit = ((tint / (int)pow(10, td->num_digits - 1 - i)) % 10);
+        uint8_t cr = SEVSEG_ERROR_INDEX;
         if (digit == 0 && leadingzero == 0 && i != td->num_digits - 1)
             cr = ' ';
         else
@@ -141,10 +139,41 @@ void set_display_float(struct sevseg_display_t *td, float f)
     }
 }
 
+void set_display_int(struct sevseg_display_t *td, int n)
+{
+    uint8_t r = 0;
+    uint8_t is_neg = 0;
+
+    if (n < 0)
+    {
+        set_digit(td, 0, '-');
+        is_neg = 1;
+    }
+
+    // As leftmost digit is element 0, we start from the last digit and work our way to zero.
+    // If negative, we reserve 0 for the negative sign.
+    // Exit loop once the number is fully displayed to avoid leading zeroes.
+    for (int8_t i = (td->num_digits - 1); i >= is_neg && n > 0; i--)
+    {
+        r = n % 10;
+        set_digit(td, i, r + '0');
+        n /= 10;
+    }
+}
+
+/**
+ * @brief Set the display to the specified word.
+ *
+ * @param td Display
+ * @param word String
+ * @todo Most chars are unimplemented currently
+ */
 void set_display(struct sevseg_display_t *td, char *word)
 {
-    for (int i = 0; i < td->num_digits; i++)
+    for (uint8_t i = 0; i < td->num_digits; i++)
     {
+        if (word[i] == '\0')
+            word[i] = ' ';
         set_digit(td, i, word[i]);
     }
 }

@@ -11,8 +11,8 @@
  * @return float
  */
 
-void init_thermistor(struct thermistor_t *t, volatile uint8_t *port, int pin, int bcoefficient,
-                     int series_resistor, int resistance_nominal, int temp_nominal)
+void init_thermistor(struct thermistor_t *t, volatile uint8_t *port, uint8_t pin, uint16_t bcoefficient,
+                     uint16_t series_resistor, uint16_t resistance_nominal, int8_t temp_nominal)
 {
     t->port = port;
     t->pin = pin;
@@ -31,10 +31,10 @@ void init_thermistor(struct thermistor_t *t, volatile uint8_t *port, int pin, in
  */
 void init_temperatureF(struct thermistor_t *t)
 {
-    for (int i = 0; i < THERMISTOR_TEMPERATURE_SAMPLES; i++)
+    for (uint8_t i = 0; i < THERMISTOR_TEMPERATURE_SAMPLES; i++)
     {
         t->temperatures[i] = get_temperatureF(t);
-        for (int t = 0; t < THERMISTOR_READING_CYCLES_DELAY; t++)
+        for (uint8_t t = 0; t < THERMISTOR_READING_CYCLES_DELAY; t++)
             ;
     }
 }
@@ -50,31 +50,42 @@ float get_temperature(struct thermistor_t *t)
 {
     // A simplified version of the Steinhart-Hart equation.
     // int temps[NOISE_REDUCTION_SMOOTHING_READINGS];
-    float average = 0;
-    float steinhart = 0;
+    float average;
 
-    for (int i = 0; i < NOISE_REDUCTION_SMOOTHING_READINGS; i++)
+    for (uint8_t i = 0; i < NOISE_REDUCTION_SMOOTHING_READINGS; i++)
     {
         // temps[i] = adc(t->pin);
         average += adc(t->pin); // temps[i];
-        for (int t = 0; t < THERMISTOR_READING_CYCLES_DELAY; t++)
+        for (uint8_t t = 0; t < THERMISTOR_READING_CYCLES_DELAY; t++)
             ;
     }
+    // b-parameter equation:
+    //  (1 / T) = (1 / To) + ln(R/Ro)
+    // T = temperature (in kelvins)
+    // To = Temperature nominal (in kelvins)
+    // R = Measured resistance
+    // Ro = Resistance nominal (of thermistor at temperature nominal)
 
     average /= NOISE_REDUCTION_SMOOTHING_READINGS;
-    average = ADC_MAX / average - 1;
-    average = t->series_resistor / average;
+    average = t->series_resistor / (ADC_MAX / average - 1) / t->resistance_nominal;
+    average = (log(average) * 1000) / t->bcoefficient / 1000 + (1 / (t->temperature_nominal + 273.15));
+    return (1 / average - 273.15);
 
-    steinhart = average / t->resistance_nominal; // (R/Ro)
-    steinhart = logf(steinhart);                 // ln(R/Ro)
-    steinhart /= t->bcoefficient;                // 1/B * ln(R/Ro)
-                                                 
-    steinhart += 1.0 / (t->temperature_nominal + 273.15); // + (1/To)
-   // steinhart += 1.0 / (t->temperature_nominal); // + (1/To)
-    steinhart = 1.0 / steinhart;                 // Invert
-    steinhart -= 273.15;                                  // convert absolute temp to C
+    /*
+        average /= NOISE_REDUCTION_SMOOTHING_READINGS;
+        average = (ADC_MAX / average - 1);
+        average = t->series_resistor / average;
 
-    return steinhart;
+        average = average / t->resistance_nominal;
+        average = logf(average);
+        average /= t->bcoefficient;
+
+        average += 1.0 / (t->temperature_nominal + 273.15);
+        average = 1.0 / average;                 // Invert
+        average -= 273.15;                                  // convert absolute temp to C
+        */
+
+    return average;
 }
 
 float get_temperatureC(struct thermistor_t *t)

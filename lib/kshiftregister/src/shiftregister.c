@@ -1,7 +1,7 @@
 #include "shiftregister.h"
 
-void init_shiftreg8(struct shiftreg8_t *sr, volatile uint8_t *port, int pin_latch,
-                    int pin_clock, int pin_data)
+void init_shiftreg8(struct shiftreg8_t *sr, volatile uint8_t *port, uint8_t pin_latch,
+                    uint8_t pin_clock, uint8_t pin_data)
 {
     sr->port = port;
     sr->pin_latch = pin_latch;
@@ -24,7 +24,7 @@ void shiftOut8(struct shiftreg8_t *sr, uint8_t val)
     *sr->port &= ~(1 << sr->pin_latch);
 
     // Set data pin to value
-    for (int i = 0; i < 8; i++)
+    for (uint8_t i = 0; i < 8; i++)
     {
         if (val & (1 << i))
             *sr->port |= 1 << sr->pin_data;

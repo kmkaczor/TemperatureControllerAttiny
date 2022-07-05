@@ -17,16 +17,16 @@
 struct thermistor_t
 {
     volatile uint8_t *port;
-    int pin;
-    int bcoefficient;
-    int series_resistor;
-    int resistance_nominal;
-    int temperature_nominal;
-    float temperatures[THERMISTOR_TEMPERATURE_SAMPLES];
+    uint8_t pin;
+    uint16_t bcoefficient;
+    uint16_t series_resistor;
+    uint16_t resistance_nominal;
+    int8_t temperature_nominal;
+    int temperatures[THERMISTOR_TEMPERATURE_SAMPLES];
 };
 
-void init_thermistor(struct thermistor_t *t, volatile uint8_t *port, int pin, int bcoefficient,
-                     int series_resistor, int resistance_nominal, int temp_nominal);
+void init_thermistor(struct thermistor_t *t, volatile uint8_t *port, uint8_t pin, uint16_t bcoefficient,
+                     uint16_t series_resistor, uint16_t resistance_nominal, int8_t temp_nominal);
 void init_temperatureF(struct thermistor_t *t);
 
 float get_temperature(struct thermistor_t *t);

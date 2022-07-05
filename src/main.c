@@ -5,9 +5,9 @@
 #include "sevensegment.h"
 
 #define RELAY_PORT PORTB
-#define RELAY_PIN PB0
-#define TEMP_F_ON_RELAY 70
-#define TEMP_F_OFF_RELAY 75
+#define RELAY_PIN PB2
+#define TEMP_F_ON_RELAY 80
+#define TEMP_F_OFF_RELAY 82
 
 #define ROT_ENC_SW PA0
 #define ROT_ENC_DT PB2
@@ -17,12 +17,21 @@ static struct shiftreg8_t sr;
 static struct sevseg_display_t td;
 static struct thermistor_t t1;
 
+enum display_state
+{
+  DISPLAY_AMBIENT_STATE,
+  DISPLAY_HIGH_TEMP,
+  DISPLAY_LOW_TEMP
+} volatile td_state;
+
+volatile static unsigned long long overflow = 0;
 /**
  * @brief Initialize ports and pins.
  *
  */
 void init_pins()
 {
+  GIMSK |= (1 << PCIE1);
 
   // Relay to
   _DDR(RELAY_PORT) |= (1 << RELAY_PIN);
@@ -42,28 +51,29 @@ void init_timers()
 {
 
   cli();
+  TCCR0A = 0;
+  TCCR1B = 0;
+  TCNT0 = 0;
+  TCCR0A |= (1 << WGM01);
+  TCCR0B |= (0 << CS02) | (1 << CS01) | (1 << CS00);
+  TIMSK0 |= (1 << OCIE0A);
+  OCR0A = 78; // 0.004992 sec with prescalar of 64 at 1 Mhz.
+
   /*
-    TCCR0A = 0;
-    TCCR1B = 0;
-    TCNT0 = 0;
-    TCCR0A |= (1 << WGM01);
-    TCCR0B |= (0 << CS02) | (1 << CS01) | (0 << CS00);
-    TIMSK0 |= (1 << OCIE0A);
-    OCR0A = 124; // Millisec counter
-    */
-  TCCR1A = 0x0; // set entire TCCR1A register to 0
-  TCCR1B = 0x0; // same for TCCR1B
-  TCNT1 = 0;    // initialize counter value to 0k
+ TCCR1A = 0x0; // set entire TCCR1A register to 0
+ TCCR1B = 0x0; // same for TCCR1B
+ TCNT1 = 0;    // initialize counter value to 0k
 
-  // set compare match register for 1000 Hz increments
-  // OCR1A = 15625; // 15625; // = 1000000 / (1 * 1000) - 1 (must be <65536)
-  OCR1A = 625; // 15625; // = 1000000 / (1 * 1000) - 1 (must be <65536)
+ // set compare match register for 1000 Hz increments
+ // OCR1A = 15625; // 15625; // = 1000000 / (1 * 1000) - 1 (must be <65536)
+ OCR1A = 625; // 15625; // = 1000000 / (1 * 1000) - 1 (must be <65536)
 
-  //  turn on CTC mode
-  TCCR1B |= (1 << WGM12);
-  TCCR1B |= (0 << CS12) | (1 << CS11) | (0 << CS10);
-  // enable timer compare interrupt
-  TIMSK1 |= (1 << OCIE1A);
+ //  turn on CTC mode
+ TCCR1B |= (1 << WGM12);
+ TCCR1B |= (0 << CS12) | (1 << CS11) | (0 << CS10);
+ // enable timer compare interrupt
+ TIMSK1 |= (1 << OCIE1A);
+ */
 
   sei();
 }
@@ -72,9 +82,22 @@ void init_timers()
  * @brief Timer ISR
  *
  */
-ISR(TIM1_COMPA_vect)
+ISR(TIM0_COMPA_vect)
 {
+  overflow++;
   setLCD_shiftreg(&td, &sr);
+}
+
+ISR(PCINT1_vect)
+{
+  /*
+  static uint8_t last_pinout = 0x0;
+
+  if (PORTB & (1 << ROT_ENC_CLK))
+    ;
+  if (PORTB & (1 << ROT_ENC_DT))
+    ;
+    */
 }
 
 /**
@@ -87,7 +110,7 @@ void setup()
   init_timers();
 
   // Thermistor setup
-  init_thermistor(&t1, &PORTA, PA6, 3950, 10000, 10000, 25);
+  init_thermistor(&t1, &PORTA, PA7, 3950, 10000, 10000, 25);
   init_temperatureF(&t1);
 
   // Shift register (for seven segment display)
@@ -98,9 +121,9 @@ void setup()
       {PA1,
        PA0,
        PA2,
-       PA7};
+       PA6};
 
-  int num_digits = sizeof(sevseg_pin_map) / sizeof(sevseg_pin_map[0]);
+  uint8_t num_digits = sizeof(sevseg_pin_map) / sizeof(sevseg_pin_map[0]);
   uint8_t digits[num_digits];
   init_sevseg(&td, num_digits, &PORTA, sevseg_pin_map, digits);
 }
@@ -108,14 +131,14 @@ void setup()
 int main()
 {
   setup();
-  unsigned int index = 0;
+  uint8_t index = 0;
 
   while (1)
   {
     // Set temperature display to average of 20 readings to avoid fluctuations.
-    int t_avg = 0;
+    int16_t t_avg = 0;
     t1.temperatures[index++ % THERMISTOR_TEMPERATURE_SAMPLES] = get_temperatureF(&t1);
-    for (int i = 0; i < THERMISTOR_TEMPERATURE_SAMPLES; i++)
+    for (uint8_t i = 0; i < THERMISTOR_TEMPERATURE_SAMPLES; i++)
     {
       t_avg += t1.temperatures[i];
     }
@@ -126,22 +149,20 @@ int main()
     else if (t_avg >= TEMP_F_OFF_RELAY)
       RELAY_PORT &= ~(1 << RELAY_PIN);
 
-    // set_display_float(&td, 432);
-    set_display_float(&td, t_avg);
-    //set_display_float(&td, get_temperatureF(&t1));
-   
-    //set_display_float(&td, adc(t1.pin));
+    set_display_int(&td, t_avg);
 
-    // PORTA &= ~(1 << PA0);
     /*
-    PORTA |= (1 << PA0);
-    _DDR(PORTA) &= ~(1 << PA0);
+        cli();
+        _DDR(PORTA) &= ~(1 << PA0);
+        //PORTA &= ~(1 << PA0);
+        //PORTA |= (1 << PA0);
 
-    if (PORTA & (1 << PA0))
-      set_display(&td, "1234");
+        if (PORTA & (1 << PA0))
+          set_display_int(&td, "1234");
 
-    _DDR(PORTA) |= (1 << PA0);
-    */
+        _DDR(PORTA) |= (1 << PA0);
+        sei();
+        */
     // set_display_float(&td, analogRead(t1.pin));
   }
 
