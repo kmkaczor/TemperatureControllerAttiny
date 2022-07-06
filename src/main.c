@@ -31,6 +31,7 @@ volatile static unsigned long long overflow = 0;
  */
 void init_pins()
 {
+  // Enable PCIEINT1 for rotary encoder.
   GIMSK |= (1 << PCIE1);
 
   // Relay to
@@ -166,5 +167,5 @@ int main()
     // set_display_float(&td, analogRead(t1.pin));
   }
 
-  main();
+  set_digit(&td, 0, SEVSEG_ERROR_INDEX);
 }

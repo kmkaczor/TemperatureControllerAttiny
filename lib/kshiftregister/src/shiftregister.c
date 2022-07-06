@@ -1,5 +1,14 @@
 #include "shiftregister.h"
 
+/**
+ * @brief Initialize shift register.
+ *
+ * @param sr Pointer to shift register struct object.
+ * @param port Microcontroller port. Pins must have same port value.
+ * @param pin_latch Latch pin.
+ * @param pin_clock Clock pin.
+ * @param pin_data  Data pin.
+ */
 void init_shiftreg8(struct shiftreg8_t *sr, volatile uint8_t *port, uint8_t pin_latch,
                     uint8_t pin_clock, uint8_t pin_data)
 {
@@ -16,14 +25,14 @@ void init_shiftreg8(struct shiftreg8_t *sr, volatile uint8_t *port, uint8_t pin_
  * @brief Apply value to shift register
  *
  * @param sr Shift register struct containing port and pins
- * @param sevseg_char
+ * @param val Byte mapping for shit register
  */
 void shiftOut8(struct shiftreg8_t *sr, uint8_t val)
 {
     // Turn latch on, to high.
     *sr->port &= ~(1 << sr->pin_latch);
 
-    // Set data pin to value
+    // Set data pin to val
     for (uint8_t i = 0; i < 8; i++)
     {
         if (val & (1 << i))

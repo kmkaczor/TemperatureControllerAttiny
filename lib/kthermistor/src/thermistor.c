@@ -6,8 +6,6 @@
 
 /**
  * @brief Obtain temperature readings for the thermistor.
- * // SPDX-FileCopyrightText: 2011 Limor Fried/ladyada for Adafruit Industries
- * Slightly edited by Korey Kaczor. Thanks to Limor Fried and Adafruit for modified Steinhart-Hart equation!
  * @return float
  */
 
@@ -59,33 +57,18 @@ float get_temperature(struct thermistor_t *t)
         for (uint8_t t = 0; t < THERMISTOR_READING_CYCLES_DELAY; t++)
             ;
     }
+    average /= NOISE_REDUCTION_SMOOTHING_READINGS;
+    average = t->series_resistor / (ADC_MAX / average - 1);
     // b-parameter equation:
-    //  (1 / T) = (1 / To) + ln(R/Ro)
+    // (1 / T) = (1 / To) + ln(R/Ro)
     // T = temperature (in kelvins)
     // To = Temperature nominal (in kelvins)
     // R = Measured resistance
     // Ro = Resistance nominal (of thermistor at temperature nominal)
 
-    average /= NOISE_REDUCTION_SMOOTHING_READINGS;
-    average = t->series_resistor / (ADC_MAX / average - 1) / t->resistance_nominal;
+    average = average / t->resistance_nominal;
     average = (log(average) * 1000) / t->bcoefficient / 1000 + (1 / (t->temperature_nominal + 273.15));
     return (1 / average - 273.15);
-
-    /*
-        average /= NOISE_REDUCTION_SMOOTHING_READINGS;
-        average = (ADC_MAX / average - 1);
-        average = t->series_resistor / average;
-
-        average = average / t->resistance_nominal;
-        average = logf(average);
-        average /= t->bcoefficient;
-
-        average += 1.0 / (t->temperature_nominal + 273.15);
-        average = 1.0 / average;                 // Invert
-        average -= 273.15;                                  // convert absolute temp to C
-        */
-
-    return average;
 }
 
 float get_temperatureC(struct thermistor_t *t)

@@ -2,7 +2,6 @@
 #define _SHIFT_REGISTER_KOREY
 
 #include "hardwaredefs.h"
-//#include <avr/common.h>
 
 struct shiftreg8_t
 {

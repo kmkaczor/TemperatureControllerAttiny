@@ -10,8 +10,6 @@
 
 // Thermistor and Steinhart-Hart defines
 #define THERMISTOR_TEMPERATURE_SAMPLES 20
-
-#define THERMISTOR_READING_SAMPLES 5
 #define THERMISTOR_READING_CYCLES_DELAY 10 // in processor cycles
 
 struct thermistor_t
@@ -22,7 +20,7 @@ struct thermistor_t
     uint16_t series_resistor;
     uint16_t resistance_nominal;
     int8_t temperature_nominal;
-    int temperatures[THERMISTOR_TEMPERATURE_SAMPLES];
+    int16_t temperatures[THERMISTOR_TEMPERATURE_SAMPLES];
 };
 
 void init_thermistor(struct thermistor_t *t, volatile uint8_t *port, uint8_t pin, uint16_t bcoefficient,

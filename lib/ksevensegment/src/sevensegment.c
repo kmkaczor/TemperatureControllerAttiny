@@ -3,20 +3,24 @@
 #include "math.h"
 
 /*
-   _a_
-  |   |
- f|   |b
-  |_g_|
-  |   |
- e|   |c
-  |___|
-    d   .dp
-*/
+ *  The values of a seven segment displayu are encoded as follows:
+ *
+ *       _a_
+ *      |   |
+ *     f|   |b
+ *      |_g_|
+ *      |   |
+ *     e|   |c
+ *      |___|
+ *        d   .dp
+ *
+ * Note that the .dp is the decimal point.
+ * Bit order is: abcdefg dp
+ * a is the most significant bit and decimal point is the least, thus 0b10000010 is a segment with only a and g enabled,
+ * but decimal point disabled.
+ *
+ */
 
-// Bit order is:
-// a b c d e f g dp
-// a is MSB, . is LSB.
-//  0babcdefgX
 const uint8_t DIGIT_TABLE[] =
     {
         0b11111100, // 0
@@ -48,6 +52,15 @@ const uint8_t DIGIT_TABLE[] =
 #define SEVSEG_ERROR_INDEX 13
 #define SEVSEG_NULL 14
 
+/**
+ * @brief Initialize seven segment display struct
+ *
+ * @param td Display struct pointer.
+ * @param num_digits Number of digits in display.
+ * @param port Microcontroller port. All pins must use this port.
+ * @param pinmap (Pointer to) Array of pins controlling digits on/off state, in order.
+ * @param digits (Pointer to) Array containing output value of each digit/segment. See DIGIT_TABLE[] above.
+ */
 void init_sevseg(struct sevseg_display_t *td, uint8_t num_digits,
                  volatile uint8_t *port, uint8_t *pinmap, uint8_t *digits)
 {
@@ -56,14 +69,13 @@ void init_sevseg(struct sevseg_display_t *td, uint8_t num_digits,
         return;
 
     td->num_digits = num_digits;
-    td->step = (num_digits % 2 == 0) ? 3 : 2;
+    td->step = (num_digits % 2 == 0) ? 3 : 2; // Mix refresh order to reduce flickering.
     td->port = port;
     td->pin_map = pinmap;
     td->dispdigit = digits;
 
     for (uint8_t i = 0; i < num_digits; i++)
     {
-
         *_DDR(td->port) |= (1 << pinmap[i]);
         *td->port |= (1 << td->pin_map[i]);
         td->dispdigit[i] = DIGIT_TABLE[SEVSEG_NULL];
@@ -92,17 +104,25 @@ uint8_t set_digit(struct sevseg_display_t *td, uint8_t index, char c)
 
 void setLCD_shiftreg(struct sevseg_display_t *td, struct shiftreg8_t *sr)
 {
+    // Remember last updated digit. Every ISR call updates this value.
     static uint8_t digit_to_update = {0};
 
     // Unset the priorly set digit (does nothing on first instance if run via ISR).
     *td->port &= ~(1 << td->pin_map[digit_to_update % td->num_digits]);
-    digit_to_update = (digit_to_update + 1) % td->num_digits;
+    digit_to_update = (digit_to_update + td->step) % td->num_digits;
 
     shiftOut8(sr, td->dispdigit[digit_to_update]);
 
     *td->port |= (1 << td->pin_map[digit_to_update % td->num_digits]);
 }
 
+/**
+ * @brief This is buggy and causes compiled file size to be bloated on microcontrollers like the
+ *        attiny44. Only left in for possible future reference.
+ *
+ * @param td
+ * @param f
+ */
 void set_display_float(struct sevseg_display_t *td, float f)
 {
     uint8_t leadingzero = 0;
@@ -139,11 +159,16 @@ void set_display_float(struct sevseg_display_t *td, float f)
     }
 }
 
+/**
+ * @brief Set the display to an integer value.
+ *
+ * @param td
+ * @param n
+ */
 void set_display_int(struct sevseg_display_t *td, int n)
 {
     uint8_t r = 0;
     uint8_t is_neg = 0;
-
     if (n < 0)
     {
         set_digit(td, 0, '-');
@@ -153,11 +178,18 @@ void set_display_int(struct sevseg_display_t *td, int n)
     // As leftmost digit is element 0, we start from the last digit and work our way to zero.
     // If negative, we reserve 0 for the negative sign.
     // Exit loop once the number is fully displayed to avoid leading zeroes.
-    for (int8_t i = (td->num_digits - 1); i >= is_neg && n > 0; i--)
+    int8_t i;
+    for (i = (td->num_digits - 1); i >= is_neg && n > 0; i--)
     {
         r = n % 10;
         set_digit(td, i, r + '0');
         n /= 10;
+    }
+
+    // Clear unused digits (e.g. remove 3rd digit if temperature goes from 101 to 99).
+    for (; i >= is_neg; i--)
+    {
+        set_digit(td, i, ' ');
     }
 }
 
@@ -166,7 +198,7 @@ void set_display_int(struct sevseg_display_t *td, int n)
  *
  * @param td Display
  * @param word String
- * @todo Most chars are unimplemented currently
+ * @todo Most chars are currently unimplemented.
  */
 void set_display(struct sevseg_display_t *td, char *word)
 {
