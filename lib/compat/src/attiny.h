@@ -5,6 +5,6 @@
 #include <avr/io.h>
 
 #define _DDR(port) (*(&port - 1)) // Attiny DDRx registers are at one byte lower address
-int adc(uint8_t pin);
+uint16_t adc(uint8_t pin);
 
 #endif

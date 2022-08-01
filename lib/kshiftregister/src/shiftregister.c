@@ -9,8 +9,8 @@
  * @param pin_clock Clock pin.
  * @param pin_data  Data pin.
  */
-void init_shiftreg8(struct shiftreg8_t *sr, volatile uint8_t *port, uint8_t pin_latch,
-                    uint8_t pin_clock, uint8_t pin_data)
+void init_shiftreg8(struct shiftreg8_t *sr, volatile uint8_t *port, const uint8_t pin_latch,
+                    const uint8_t pin_clock, const uint8_t pin_data)
 {
     sr->port = port;
     sr->pin_latch = pin_latch;
@@ -27,7 +27,7 @@ void init_shiftreg8(struct shiftreg8_t *sr, volatile uint8_t *port, uint8_t pin_
  * @param sr Shift register struct containing port and pins
  * @param val Byte mapping for shit register
  */
-void shiftOut8(struct shiftreg8_t *sr, uint8_t val)
+void shiftOut8(struct shiftreg8_t *sr, const uint8_t val)
 {
     // Turn latch on, to high.
     *sr->port &= ~(1 << sr->pin_latch);
