@@ -46,7 +46,7 @@ static float get_thermistor_temperature(struct thermistor_t *t)
     // Ro = Resistance nominal (of thermistor at temperature nominal)
 
     average = average / t->resistance_nominal;
-    average = (log(average) * 1000) / t->bcoefficient / 1000 + (1 / (t->temperature_nominal + 273.15));
+    average = log(average) / t->bcoefficient + (1 / (t->temperature_nominal + 273.15));
     // average = (log(average) * 1000) / t->bcoefficient / 1000 + (1 / ((t->temperature_nominal + 27315) / 100));
     average = (1 / average - 273.15);
 
@@ -61,7 +61,7 @@ static float get_thermistor_temperature(struct thermistor_t *t)
  * @return float
  */
 
-void init_thermistor(struct thermistor_t *t, volatile uint8_t * port, const uint8_t pin, const uint16_t bcoefficient,
+void init_thermistor(struct thermistor_t *t, volatile uint8_t *port, const uint8_t pin, const uint16_t bcoefficient,
                      const uint16_t series_resistor, const uint16_t resistance_nominal, const int8_t temp_nominal)
 {
     t->port = port;
@@ -100,8 +100,6 @@ static void init_temperature(struct thermistor_t *t)
 }
 */
 
-
-
 void log_temperature(struct thermistor_t *t)
 {
     t->temperatures[t->index++ % THERMISTOR_TEMPERATURE_SAMPLES] = get_thermistor_temperature(t);
@@ -111,7 +109,7 @@ float get_temperature(const struct thermistor_t *t)
 {
     float temp_avg = 0;
 
-    for (int i = 0; i < THERMISTOR_TEMPERATURE_SAMPLES; i++)
+    for (uint16_t i = 0; i < THERMISTOR_TEMPERATURE_SAMPLES; i++)
         temp_avg += t->temperatures[i];
 
     return temp_avg / THERMISTOR_TEMPERATURE_SAMPLES;

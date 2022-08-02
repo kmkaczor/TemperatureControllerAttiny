@@ -1,6 +1,8 @@
 #include <avr/interrupt.h>
 #include <avr/io.h>
 #include <avr/eeprom.h>
+
+#include "rotaryencoder.h"
 #include "shiftregister.h"
 #include "thermistor.h"
 #include "sevensegment.h"
@@ -27,8 +29,9 @@
 #define ROT_ENC_CLK PB2
 
 static struct shiftreg8_t sr;
-static struct sevseg_display_t td;
+static struct sevseg_display_t ss1;
 static struct thermistor_t t1;
+static struct rotary_encoder_t re1;
 
 enum display_state
 {
@@ -51,7 +54,7 @@ enum rot_enc_event
 volatile static unsigned int overflow = 0;
 static int16_t temp_high_thresh;
 static int16_t temp_low_thresh;
-volatile uint8_t read_temp = 0;
+volatile static uint8_t read_temp = 0;
 
 /**
  * @brief Initialize ports and pins.
@@ -59,16 +62,9 @@ volatile uint8_t read_temp = 0;
  */
 void init_pins()
 {
-  // Enable PCIEINT1 for rotary encoder.
-  // GIMSK |= (1 << PCIE1);
-  // PCMSK1 |= (1 << PCINT8) | (1 << PCINT9) | (1 << PCINT10);
-  _DDR(PORTB) |= (0 << PB1); // Input PB1
-  PORTB |= (1 << ROT_ENC_SW);
-
-  // Relay to
+  // Relay data direction input
   _DDR(RELAY_PORT) |= (1 << RELAY_PIN);
 
-  // Initialize ADC operation
   // Enable ADC
   // Prescalar values: 2, 2, 4 8, 16, 32, 64, 128
   // ADC must be between 50 to 200 khz, prescale accordingly.
@@ -81,31 +77,13 @@ void init_pins()
  */
 void init_timers()
 {
-
   cli();
-  TCCR0A = 0;
-  TCCR1B = 0;
+
   TCNT0 = 0;
-  TCCR0A |= (1 << WGM01);
-  TCCR0B |= (0 << CS02) | (1 << CS01) | (1 << CS00);
+  TCCR0A = (1 << WGM01);
+  TCCR0B = (0 << CS02) | (1 << CS01) | (1 << CS00);
   TIMSK0 |= (1 << OCIE0A);
   OCR0A = 78; // 0.004992 sec with prescalar of 64 at 1 Mhz.
-
-  /*
- TCCR1A = 0x0; // set entire TCCR1A register to 0
- TCCR1B = 0x0; // same for TCCR1B
- TCNT1 = 0;    // initialize counter value to 0k
-
- // set compare match register for 1000 Hz increments
- // OCR1A = 15625; // 15625; // = 1000000 / (1 * 1000) - 1 (must be <65536)
- OCR1A = 625; // 15625; // = 1000000 / (1 * 1000) - 1 (must be <65536)
-
- //  turn on CTC mode
- TCCR1B |= (1 << WGM12);
- TCCR1B |= (0 << CS12) | (1 << CS11) | (0 << CS10);
- // enable timer compare interrupt
- TIMSK1 |= (1 << OCIE1A);
- */
 
   sei();
 }
@@ -117,30 +95,22 @@ void init_timers()
 ISR(TIM0_COMPA_vect)
 {
   // Refresh display before doing anything else.
-  setLCD_shiftreg(&td, &sr);
+  setLCD_shiftreg(&ss1, &sr);
 
   static uint8_t rotenc_last_position = 0b11;
-  // static uint8_t rotenc_current_position = 11;
-  static uint8_t rotenc_current_dt = 1;
-  static uint8_t rotenc_current_clk = 1;
-  static uint8_t rotenc_current_sw = 1;
-  static uint8_t rotenc_last_sw = 1;
   static unsigned int rotenc_overflow = 0;
-
   static unsigned int temperature_overflow = 0;
+  // Bitmask of rotary encoder status. Three bits, SW, DT, and CLK.
+  uint8_t rotenc_current = get_rotenc_status(&re1);
 
-  // Add reading to temperature
+  // Allow temperature reading in main loop
   if ((unsigned int)(overflow - temperature_overflow) >= TIME_TEMP_READING) // 2 Seconds
   {
     temperature_overflow = overflow;
     read_temp = 1;
   }
-  // rotenc_current_position = !!(PINB & (1 << ROT_ENC_CLK)) << 1 | !!(PINB & 1 << ROT_ENC_DT);
-  rotenc_current_dt = !!(PINB & (1 << ROT_ENC_DT));
-  rotenc_current_clk = !!(PINB & (1 << ROT_ENC_CLK));
-  rotenc_current_sw = !!(PINB & (1 << ROT_ENC_SW));
 
-  if (rotenc_current_sw == 0 && rotenc_last_sw == 1) // Active low
+  if ((rotenc_current & 0b100) == 0b000 && (rotenc_last_position & 0b100) == 0b100) // Active low
   {
     rot_enc_state = ROT_EVENT_BUTTON;
     rotenc_overflow = overflow;
@@ -148,18 +118,18 @@ ISR(TIM0_COMPA_vect)
 
   // 11 -> 10; 00 -> 01 CCW
   // 11 -> 01; 00 -> 10 CW
-  if (rotenc_last_position == 0b11)
+  if ((rotenc_last_position & 0b11) == 0b11)
   {
-    if (rotenc_current_dt == 1 && rotenc_current_clk == 1)
+    if ((rotenc_current & 0b11) == 0b11)
     {
       // No change
     }
-    else if (rotenc_current_dt == 1 && rotenc_current_clk == 0)
+    else if ((rotenc_current & 0b11) == 0b10)
     {
       rot_enc_state = ROT_EVENT_CCW;
       // CCW
     }
-    else if (rotenc_current_dt == 0 && rotenc_current_clk == 1)
+    else if ((rotenc_current & 0b11) == 0b01)
     {
       rot_enc_state = ROT_EVENT_CW;
       // CW
@@ -168,9 +138,9 @@ ISR(TIM0_COMPA_vect)
   else
     rotenc_overflow = overflow;
 
-  rotenc_last_position = rotenc_current_dt << 1 | rotenc_current_clk << 0;
-  rotenc_last_sw = rotenc_current_sw;
+  rotenc_last_position = rotenc_current;
 
+  // Save temperature limits to EEPROM if changed on user input timeout.
   if (td_state != DISPLAY_AMBIENT_STATE && (unsigned int)(overflow - rotenc_overflow) >= TIME_ROTENC_TIMEOUT)
   {
     eeprom_update_word(EEPROM_LOW_ADDY, temp_low_thresh);
@@ -196,6 +166,8 @@ void setup()
   // Shift register (for seven segment display)
   init_shiftreg8(&sr, &PORTA, PA3, PA4, PA5);
 
+  init_rotary_encoder(&re1, &PORTB, PB1, PB0, PB2);
+
   // Seven Segment Display
   static uint8_t sevseg_pin_map[] =
       {PA0,
@@ -204,7 +176,9 @@ void setup()
 
   uint8_t num_digits = sizeof(sevseg_pin_map) / sizeof(sevseg_pin_map[0]);
   uint8_t digits[num_digits];
-  init_sevseg(&td, num_digits, &PORTA, sevseg_pin_map, SEVSEG_OPT_INVERT, digits);
+  init_sevseg(&ss1, num_digits, &PORTA, sevseg_pin_map, SEVSEG_OPT_INVERT, digits);
+
+  // Read EEPROM for temperature values.
   temp_low_thresh = eeprom_read_word(EEPROM_LOW_ADDY);
   if (temp_low_thresh == 0xFFFF)
     temp_low_thresh = TEMP_LOW_DEFAULT;
@@ -230,9 +204,13 @@ int main()
     int16_t temperature = get_temperature(&t1);
     if (t1.thermistor_error != 0)
     {
-      set_display(&td, "ERR", 3);
+      set_digit(&ss1, 0, 'E', 0);
+      set_digit(&ss1, 1, 'R', 0);
+      set_digit(&ss1, 2, 'R', 0);
+
       RELAY_PORT &= ~(1 << RELAY_PIN);
-      continue;
+      while (1)
+        ;
     }
     else if (temperature <= temp_low_thresh)
       RELAY_PORT |= (1 << RELAY_PIN);
@@ -276,26 +254,26 @@ int main()
     case DISPLAY_HIGH_TEMP:
       if (incr && (temp_high_thresh + incr >= TEMP_LOW_MIN && temp_high_thresh + incr <= TEMP_HIGH_MAX) && temp_high_thresh + incr > temp_low_thresh)
         temp_high_thresh += incr;
-      set_display_int(&td, temp_high_thresh);
-      set_decimal(&td, 0);
+      set_display_int(&ss1, temp_high_thresh);
+      set_decimal(&ss1, 0);
       break;
 
     case DISPLAY_LOW_TEMP:
       if (incr && (temp_low_thresh + incr >= TEMP_LOW_MIN && temp_low_thresh + incr <= TEMP_HIGH_MAX) && temp_low_thresh + incr < temp_high_thresh)
         temp_low_thresh += incr;
-      set_display_int(&td, temp_low_thresh);
-      set_decimal(&td, 2);
+      set_display_int(&ss1, temp_low_thresh);
+      set_decimal(&ss1, 2);
       break;
 
     default:
     case DISPLAY_AMBIENT_STATE:
 
-      set_display_int(&td, temperature);
+      set_display_int(&ss1, temperature);
       break;
     }
     incr = 0;
   }
 
   // Should not reach here.
-  set_digit(&td, 0, SEVSEG_ERROR_INDEX, 0);
+  //  set_digit(&ss1, 0, SEVSEG_ERROR_INDEX, 0);
 }

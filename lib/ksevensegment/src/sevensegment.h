@@ -28,8 +28,6 @@ digit_t set_digit(struct sevseg_display_t *td, uint8_t index, const char c, cons
 void set_display_int(struct sevseg_display_t *td, int n);
 void set_display(struct sevseg_display_t *td, char *word, const uint8_t len);
 
-// void set_display_float(struct sevseg_display_t *td, float f);
-
 void setLCD_shiftreg(struct sevseg_display_t *td, struct shiftreg8_t *sr);
 
 void set_decimal(struct sevseg_display_t *td, const uint8_t n);
@@ -37,6 +35,5 @@ void unset_decimal(struct sevseg_display_t *td, const uint8_t n);
 
 void invert_display(struct sevseg_display_t *td);
 
-// static digit_t invert_display_char(digit_t c);
 
 #endif
